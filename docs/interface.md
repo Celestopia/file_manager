@@ -1,0 +1,31 @@
+# Interface and document viewers
+
+[Architecture overview](../PROJECT.md) · [User guide](../README.md)
+
+This document owns layout, interaction, preview, and content-rendering behavior. See [frontend](frontend.md) for draft and navigation state ownership.
+
+## Interface and layout
+
+The centered logo/title header has no vault subtitle. Custom minimize/maximize/restore/close buttons replace native decorations. The left source list is sorted by effective title then path, displaying title and availability without a secondary path. The reader heading shows filename with suffix; filename/extension helpers operate on the final path component, including extensionless files and dotted directories. Toolbar order is Open file, Notes, Details. Icons retain accessible names and tooltips.
+
+Both right panels are flat, full-height columns with bold headings. Source values are ordinary text until their pencil toggles edit mode; Apply saves and Reset discards. An unchanged saved URL remains a blue, non-underlined link while unrelated metadata is in draft. Relative path, size, Created, and Modified are under File information, collapsed by default and indented when expanded. Timestamps are read-only first-level fields.
+
+Saved notes open in Preview; new notes start in Edit. Preview precedes Edit. The plus creates a note, and the bordered red bin requests permanent deletion. Information opens a centered blurred-backdrop dialog with description, Created, Modified, and saved-file size. Description changes still need Save note. Source and note metadata share compact label/value spacing.
+
+`ResizeHandle` implements pointer capture, cancellation, and arrow-key resizing. Source width below 100px collapses it; ArrowLeft at its 180px minimum also collapses. An edge chevron at 30% workspace height restores 280px, or 200px at viewport widths up to 1000px. Source width is capped at 50vw while reserving 286px for the central reader and, when a right panel is open, its 280px minimum. The effective cap is max(180px, min(50vw, viewport minus 286px minus the right-panel reservation)). Opening a right panel can temporarily clamp the visible source width; closing it restores the requested width. Right-panel width is limited to max(280px, min(60vw, viewport minus visible source width minus 286px)). Dragging a right panel below 100px closes it without replacing drafts; ArrowRight at its 280px minimum also closes it. No right-edge chevron is shown; the corresponding toolbar button restores the last usable width. Resizing the window reclamps visible widths; 850×600 is the minimum native size. New native windows start maximized with 1240×850 as their restored dimensions. Layout preferences are not persisted.
+
+The whole source tag field is the keyboard-accessible dropdown trigger; “Select tags” is plain placeholder text, and chip removal does not toggle the dropdown. The source tag dropdown has search, up to three recent selections, and all tags alphabetically. Matching ignores case but identities/names remain case-sensitive. Both dropdown and manager checkboxes call the same assignment action; added selections update the same optional history. Recent means selected, not committed. It is stored in the vault-owned WebView localStorage keyed by vault root and never changes metadata timestamps. Assignments require Apply. Create tag has a form-only view; saving returns to the manager. The manager retains assignment checkboxes and definition editing.
+
+The Settings gear contains Open folder and Refresh. `Notifications` supplies independent status/error banners at top center, renewed for five seconds per update, with manual dismissal and cleared timers. Inline validation/unavailable placeholders remain next to relevant content; confirmations require action.
+
+## Source viewers
+
+`usePreviewZoom` installs a non-passive Ctrl+wheel listener only on preview content. It prevents whole-WebView zoom, normalizes pixel/line/page deltas, and batches trackpad events into animation frames. PDF scale is clamped to 25–400%, leaving Fit width from the hovered page’s effective scale and restoring its pointer-relative horizontal/vertical position. The zoom selector includes the current wheel-selected percentage. Markdown/TXT scale their typography to 50–250%, keep approximate proportional reading position through reflow, and expose percentage/reset controls. Ordinary wheel scrolling is unchanged. Zoom is temporary and resets on source changes; no vault metadata is written.
+
+PDF.js requests native byte ranges by source UUID. Backend extension/path checks and 2 MiB per-request bounds protect reads; the frontend chunks at most 1 MiB and receives binary IPC rather than JSON byte arrays. Pages form a continuous vertical stack with zoom and a scroll-driven page indicator. Page dimensions are loaded before laying out the stack, including mixed page sizes. IntersectionObserver renders canvases within 800px of the viewport and releases distant canvases. Visited PDF.js text layers remain mounted so selection across adjacent pages and copying survive scrolling; text DOM therefore grows with visited pages, while raster memory stays bounded by the visible region. Zoom and container resizing restore a page-relative scroll anchor. Rendering tasks and document loads dispose on source/revision changes. Text selection requires embedded PDF text; OCR, annotations, PDF search, and an encrypted-PDF workflow are not implemented.
+
+Markdown (`.md`, `.markdown`) and TXT source previews read UTF-8, optionally BOM-prefixed, bounded to 8 MiB. TXT preserves whitespace and literal markup. Empty files have an explicit placeholder; invalid encoding/oversized sources can be opened externally. Selection or manual refresh reloads the preview. No source editor or write command exists. Other formats use the default-application fallback.
+
+## Bundled assets and content policy
+
+Frontend assets, PDF worker, character maps, and standard fonts are bundled locally. CSP disallows arbitrary connections and objects. `MarkdownPreview` memoizes parsing by body, removes raw HTML, sanitizes output, omits images/frames/forms, and prevents link navigation. Both source and note Markdown use this policy. Text source loads discard results after identity/revision changes or unmount.

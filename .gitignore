@@ -1,0 +1,9 @@
+/node_modules/
+/target/
+/web-dist/
+/public/pdf-assets/
+/dist/
+/others/
+*.log
+LESSONS.md
+BACKGROUND.md
