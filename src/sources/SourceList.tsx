@@ -10,6 +10,7 @@ export function SourceList({
   onSelect,
   onOpen,
   onRefresh,
+  onManageTags,
 }: {
   ordered: Source[];
   selected: string;
@@ -20,6 +21,7 @@ export function SourceList({
   onSelect: (id: string) => void;
   onOpen: () => void;
   onRefresh: () => void;
+  onManageTags: () => void;
 }) {
   return (
     <aside
@@ -69,6 +71,7 @@ export function SourceList({
           hasVault={hasVault}
           onOpen={onOpen}
           onRefresh={onRefresh}
+          onManageTags={onManageTags}
         />
       </div>
     </aside>

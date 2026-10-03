@@ -61,6 +61,7 @@ const note = object<Note>({
   modified_at: string,
 });
 const tag = object<Tag>({
+  parent_id: nullable(string),
   id: string,
   name: string,
   description: string,

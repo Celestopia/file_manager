@@ -13,6 +13,7 @@ import { recordRecentTags } from "./tagHistory";
 import { TagSelector } from "./TagSelector";
 const tags = ["Alpha", "alpha", "Beta", "Gamma"].map((name) => ({
   id: name,
+  parent_id: null,
   name,
   description: "",
   created_at: "",
@@ -45,14 +46,14 @@ it("searches tags without merging case-sensitive names and toggles draft assignm
     target: { value: "ALP" },
   });
   const all = within(screen.getByRole("group", { name: "All tags" }));
-  expect(all.getAllByRole("checkbox")).toHaveLength(2);
-  fireEvent.click(all.getByRole("checkbox", { name: "Alpha" }));
-  expect(all.getByRole("checkbox", { name: "Alpha" })).toHaveAttribute(
-    "aria-checked",
+  expect(all.getAllByRole("button")).toHaveLength(2);
+  fireEvent.click(all.getByRole("button", { name: "Alpha" }));
+  expect(all.getByRole("button", { name: "Alpha" })).toHaveAttribute(
+    "aria-pressed",
     "true",
   );
-  expect(all.getByRole("checkbox", { name: "alpha" })).toHaveAttribute(
-    "aria-checked",
+  expect(all.getByRole("button", { name: "alpha" })).toHaveAttribute(
+    "aria-pressed",
     "false",
   );
   fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
@@ -64,7 +65,7 @@ it("remembers only the last three selected tags and isolates vault history", () 
   fireEvent.click(screen.getByRole("button", { name: "Select tags" }));
   const all = within(screen.getByRole("group", { name: "All tags" }));
   for (const tag of tags)
-    fireEvent.click(all.getByRole("checkbox", { name: tag.name }));
+    fireEvent.click(all.getByRole("button", { name: tag.name }));
   expect(JSON.parse(localStorage.getItem("recent-tags:vault")!)).toEqual([
     "Gamma",
     "Beta",
@@ -76,4 +77,37 @@ it("remembers only the last three selected tags and isolates vault history", () 
   expect(
     screen.queryByRole("group", { name: "Recent tags" }),
   ).not.toBeInTheDocument();
+});
+
+it("shows nested tags as name-only rows and chips without checkbox controls", () => {
+  const nested = [
+    ...tags,
+    { ...tags[0], id: "nested", name: "Leaf", parent_id: "Alpha" },
+  ];
+  const selected: string[][] = [];
+  render(
+    <TagSelector
+      vault="vault"
+      tags={nested}
+      selected={["nested"]}
+      disabled={false}
+      onChange={(ids) => selected.push(ids)}
+    />,
+  );
+  expect(document.querySelector(".tag-selection .tag")).toHaveTextContent(
+    /^Leaf$/,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Select tags" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Search tags" }), {
+    target: { value: "Leaf" },
+  });
+  const row = within(screen.getByRole("group", { name: "All tags" })).getByRole(
+    "button",
+    { name: "Leaf" },
+  );
+  expect(row).toHaveAttribute("aria-pressed", "true");
+  expect(screen.queryByRole("checkbox")).toBeNull();
+  expect(screen.queryByText(/Alpha → Leaf/)).toBeNull();
+  fireEvent.click(row);
+  expect(selected).toEqual([[]]);
 });

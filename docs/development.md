@@ -40,7 +40,7 @@ The local `others/test-vault` is optional and is not distributed through Git. Ge
 ## Portable packaging
 
 ```powershell
-./scripts/build-portable.ps1
+npm run package:windows
 ```
 
 `build-portable.ps1` builds the frontend and locked release binary, stages executable/README/PDF.js license/checksum, checks the old executable is not locked, then publishes to `dist/File Manager`. Failure before publication preserves the previous package; publication failure restores it. The script never kills a user process and validates cleanup/move targets inside dist. The executable embeds local assets and is portable, unsigned, and WebView2-dependent.
@@ -54,7 +54,7 @@ node scripts/inspect-native.mjs "dist/File Manager/File Manager.exe" clean
 
 The native inspection script also accepts `save` and `discard` close modes.
 
-`smoke-portable.ps1` launches a fresh hidden test vault, requires actual PDF rendering, closes/reopens, and checks original bytes and modification time. `inspect-native.mjs` uses an isolated debug port, verifies fixture identity, bounds CDP requests, rejects requests on disconnection, and removes stale smoke output before reopening. It checks an eight-page mixed-size PDF, mouse and cross-page text selection, off-screen canvas release without losing selected text, and zoom reading-position preservation. It covers normal/compact layouts, panel resizing/collapse, drafts, source previews, tags, note save/delete, failed vault handoff, modal focus, actual clean/Save/Discard process exit, and reopened PDF rendering. Screenshots and results go under `others/ui-review`. Only inspection enables WebView debugging.
+`smoke-portable.ps1` launches a fresh hidden test vault, requires actual PDF rendering, closes/reopens, and checks original bytes and modification time. `inspect-native.mjs` uses an isolated debug port, verifies fixture identity, bounds CDP requests, rejects requests on disconnection, and removes stale smoke output before reopening. It checks an eight-page mixed-size PDF, mouse and cross-page text selection, off-screen canvas release without losing selected text, and zoom reading-position preservation. It covers normal/compact layouts, panel resizing/collapse, drafts, source previews, hierarchical tag creation/assignment/deletion, note save/delete, failed vault handoff, modal focus, actual clean/Save/Discard process exit, and reopened PDF rendering. Screenshots and results go under `others/ui-review`. Only inspection enables WebView debugging.
 
 `--vault`, `--smoke`, and `--inspect-smoke` are internal startup/testing flags. Smoke support is runtime-gated in the exact delivered executable, not compiled out or moved to a different test binary. Smoke markers are written only under the test vault's `.file_manager`. Initial discovery remains ordinary production functionality. Historical audits and verification evidence under `others/` are optional local material, not required project documentation.
 

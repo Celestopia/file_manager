@@ -50,6 +50,8 @@ pub struct Note {
 pub struct Tag {
     pub id: String,
     pub name: String,
+    #[serde(deserialize_with = "Option::<String>::deserialize")]
+    pub parent_id: Option<String>,
     pub description: String,
     pub created_at: String,
     pub modified_at: String,
@@ -99,6 +101,8 @@ pub struct NoteEdit {
 pub struct TagEdit {
     pub id: Option<String>,
     pub name: String,
+    #[serde(deserialize_with = "Option::<String>::deserialize")]
+    pub parent_id: Option<String>,
     pub description: String,
 }
 pub fn now() -> String {
@@ -106,4 +110,11 @@ pub fn now() -> String {
 }
 pub fn id() -> String {
     uuid::Uuid::new_v4().to_string()
+}
+
+#[derive(Clone, Serialize)]
+pub struct TagDeletionImpact {
+    pub path: String,
+    pub affected_sources: usize,
+    pub detached_children: usize,
 }

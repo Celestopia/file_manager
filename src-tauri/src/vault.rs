@@ -122,19 +122,18 @@ pub fn validate(c: &Catalog) -> Result<()> {
         );
     }
     let mut tag_ids = HashSet::new();
-    let mut names = HashSet::new();
     for t in &c.tags {
         ensure!(
             valid_id(&t.id)
                 && tag_ids.insert(&t.id)
                 && !t.name.is_empty()
                 && t.name.trim() == t.name
-                && names.insert(&t.name)
                 && stamp(&t.created_at)
                 && stamp(&t.modified_at),
             "Invalid or duplicate tag"
         );
     }
+    crate::tag_hierarchy::validate(&c.tags)?;
     Ok(())
 }
 fn read_lines<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
@@ -270,7 +269,7 @@ impl Vault {
                 Change {
                     path: "vault.json".into(),
                     body: Some(serde_json::to_string_pretty(&Manifest {
-                        schema_version: 1,
+                        schema_version: 2,
                         id: id(),
                     })?),
                 },
@@ -295,8 +294,8 @@ impl Vault {
         }
         let manifest: Manifest = serde_json::from_slice(&fs::read(manifest_path)?)?;
         ensure!(
-            manifest.schema_version == 1 && valid_id(&manifest.id),
-            "Unsupported or invalid vault manifest"
+            manifest.schema_version == 2 && valid_id(&manifest.id),
+            "Unsupported or invalid vault manifest; this application requires schema version 2 (no automatic migration)"
         );
         let catalog = Catalog {
             sources: read_lines(&safe_path(&dir, "sources.jsonl")?)?,
@@ -531,23 +530,18 @@ impl Vault {
         let name = edit.name.trim().to_string();
         ensure!(!name.is_empty(), "Tag name is required");
         let mut next = self.catalog.clone();
-        ensure!(
-            !next
-                .tags
-                .iter()
-                .any(|t| t.name == name && Some(&t.id) != edit.id.as_ref()),
-            "This case-sensitive tag name already exists"
-        );
         if let Some(tag_id) = edit.id {
             let t = next
                 .tags
                 .iter_mut()
                 .find(|t| t.id == tag_id)
                 .context("Unknown tag")?;
-            if t.name == name && t.description == edit.description {
+            if t.name == name && t.description == edit.description && t.parent_id == edit.parent_id
+            {
                 return Ok(());
             }
             t.name = name;
+            t.parent_id = edit.parent_id;
             t.description = edit.description;
             t.modified_at = now();
         } else {
@@ -555,6 +549,7 @@ impl Vault {
             next.tags.push(Tag {
                 id: id(),
                 name,
+                parent_id: edit.parent_id,
                 description: edit.description,
                 created_at: timestamp.clone(),
                 modified_at: timestamp,
@@ -562,18 +557,13 @@ impl Vault {
         }
         self.commit(next, None)
     }
+    pub fn preview_tag_deletion(&self, tag_id: &str) -> Result<TagDeletionImpact> {
+        let (candidate, impact) = crate::tag_hierarchy::plan_deletion(&self.catalog, tag_id)?;
+        validate(&candidate)?;
+        Ok(impact)
+    }
     pub fn delete_tag(&mut self, tag_id: &str) -> Result<()> {
-        ensure!(
-            !self
-                .catalog
-                .sources
-                .iter()
-                .any(|s| s.tag_ids.iter().any(|t| t == tag_id)),
-            "Unassign this tag from its sources first"
-        );
-        let mut next = self.catalog.clone();
-        ensure!(next.tags.iter().any(|t| t.id == tag_id), "Unknown tag");
-        next.tags.retain(|t| t.id != tag_id);
+        let (next, _) = crate::tag_hierarchy::plan_deletion(&self.catalog, tag_id)?;
         self.commit(next, None)
     }
 }

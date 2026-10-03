@@ -1,3 +1,4 @@
+import { TagTree } from "./TagTree";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../ui/Icons";
 import { useRecentTags } from "./tagHistory";
@@ -38,10 +39,9 @@ export function TagSelector({
     }
   };
   const matches = (tag: Tag) =>
-    tag.name.toLocaleLowerCase().includes(query.toLocaleLowerCase());
-  const all = [...tags]
-    .filter(matches)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    [tag.name, tag.description].some((value) =>
+      value.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+    );
   const recentTags = recent
     .map((id) => tags.find((t) => t.id === id))
     .filter((t): t is Tag => !!t && matches(t));
@@ -50,14 +50,12 @@ export function TagSelector({
       {items.map((tag) => (
         <button
           key={tag.id}
-          role="checkbox"
-          aria-checked={selected.includes(tag.id)}
+          aria-pressed={selected.includes(tag.id)}
           disabled={disabled}
           onClick={() => toggle(tag.id)}
           title={tag.description}
         >
           <span>{tag.name}</span>
-          <span aria-hidden="true">{selected.includes(tag.id) ? "✓" : ""}</span>
         </button>
       ))}
     </div>
@@ -80,7 +78,7 @@ export function TagSelector({
           e.preventDefault();
           const items = Array.from(
             root.current!.querySelectorAll<HTMLElement>(
-              ".tag-dropdown input, .tag-options button:not(:disabled)",
+              ".tag-dropdown input, .tag-options button:not(:disabled), .tag-options input:not(:disabled)",
             ),
           );
           const index = items.indexOf(document.activeElement as HTMLElement);
@@ -123,7 +121,11 @@ export function TagSelector({
         {selected.map((id) => {
           const tag = tags.find((t) => t.id === id);
           return (
-            <span className="tag" key={id} title={tag?.description}>
+            <span
+              className="tag"
+              key={id}
+              title={tag?.description || undefined}
+            >
               {tag?.name}
               <button
                 aria-label={`Remove tag ${tag?.name}`}
@@ -157,10 +159,13 @@ export function TagSelector({
               </>
             )}
             <h4>All tags</h4>
-            {options(all, "All tags")}
-            {all.length === 0 && (
-              <p>{tags.length ? "No matching tags" : "No tags yet"}</p>
-            )}
+            <TagTree
+              tags={tags}
+              query={query}
+              selected={selected}
+              disabled={disabled}
+              onToggle={toggle}
+            />
           </div>
         </div>
       )}

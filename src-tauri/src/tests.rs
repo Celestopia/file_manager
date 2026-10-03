@@ -267,10 +267,11 @@ fn missing_note_is_not_recreated_by_save() {
 }
 
 #[test]
-fn tags_are_case_sensitive_and_assigned_tags_cannot_be_deleted() {
+fn tags_are_case_sensitive_and_rename_preserves_source_time() {
     let (_dir, mut v) = setup();
     for name in ["Research", "research"] {
         v.edit_tag(TagEdit {
+            parent_id: None,
             id: None,
             name: name.into(),
             description: String::new(),
@@ -280,6 +281,7 @@ fn tags_are_case_sensitive_and_assigned_tags_cannot_be_deleted() {
     assert_eq!(v.catalog.tags.len(), 2);
     assert!(
         v.edit_tag(TagEdit {
+            parent_id: None,
             id: None,
             name: "Research".into(),
             description: String::new()
@@ -291,8 +293,8 @@ fn tags_are_case_sensitive_and_assigned_tags_cannot_be_deleted() {
     e.tag_ids.push(tag.id.clone());
     v.edit_source(e).unwrap();
     let source_time = v.catalog.sources[0].modified_at.clone();
-    assert!(v.delete_tag(&tag.id).is_err());
     v.edit_tag(TagEdit {
+        parent_id: None,
         id: Some(tag.id),
         name: "Renamed".into(),
         description: "tag context".into(),
@@ -516,6 +518,7 @@ fn export_frontend_contract() {
     create_note(&mut vault);
     vault
         .edit_tag(TagEdit {
+            parent_id: None,
             id: None,
             name: "Research".into(),
             description: "Context".into(),
@@ -532,4 +535,175 @@ fn export_frontend_contract() {
         serde_json::to_vec_pretty(&value).unwrap(),
     )
     .unwrap();
+}
+
+fn add_tag(v: &mut Vault, name: &str, parent: Option<&str>) -> String {
+    v.edit_tag(TagEdit {
+        id: None,
+        name: name.into(),
+        parent_id: parent.map(str::to_owned),
+        description: String::new(),
+    })
+    .unwrap();
+    v.catalog
+        .tags
+        .iter()
+        .find(|t| t.name == name && t.parent_id.as_deref() == parent)
+        .unwrap()
+        .id
+        .clone()
+}
+
+#[test]
+fn hierarchy_validates_siblings_cycles_and_preserves_subtree_identity() {
+    let (_dir, mut v) = setup();
+    let a = add_tag(&mut v, "A", None);
+    let b = add_tag(&mut v, "B", None);
+    let child = add_tag(&mut v, "Child", Some(&a));
+    let other = add_tag(&mut v, "Child", Some(&b));
+    add_tag(&mut v, "child", Some(&a));
+    let leaf = add_tag(&mut v, "Leaf", Some(&child));
+    let leaf_before =
+        serde_json::to_value(v.catalog.tags.iter().find(|t| t.id == leaf).unwrap()).unwrap();
+    let before = serde_json::to_value(&v.catalog).unwrap();
+    for (id, name, parent) in [
+        (None, "Child", Some(a.clone())),
+        (Some(a.clone()), "A", Some(leaf.clone())),
+        (Some(a.clone()), "A", Some(a.clone())),
+        (Some(a.clone()), "A", Some(uuid::Uuid::new_v4().to_string())),
+        (Some(child.clone()), "Child", Some(b.clone())),
+    ] {
+        assert!(
+            v.edit_tag(TagEdit {
+                id,
+                name: name.into(),
+                parent_id: parent,
+                description: String::new()
+            })
+            .is_err()
+        );
+        assert_eq!(serde_json::to_value(&v.catalog).unwrap(), before);
+    }
+    let mut source = edit(&v);
+    source.tag_ids = vec![leaf.clone()];
+    v.edit_source(source).unwrap();
+    let source_before = serde_json::to_value(&v.catalog.sources).unwrap();
+    v.edit_tag(TagEdit {
+        id: Some(child.clone()),
+        name: "Moved".into(),
+        parent_id: Some(b),
+        description: String::new(),
+    })
+    .unwrap();
+    assert_eq!(
+        crate::tag_hierarchy::path(&v.catalog.tags, &leaf),
+        "B → Moved → Leaf"
+    );
+    assert_eq!(
+        serde_json::to_value(v.catalog.tags.iter().find(|t| t.id == leaf).unwrap()).unwrap(),
+        leaf_before
+    );
+    assert_eq!(
+        serde_json::to_value(&v.catalog.sources).unwrap(),
+        source_before
+    );
+    assert!(v.catalog.tags.iter().any(|t| t.id == other));
+}
+
+#[test]
+fn deleting_assigned_parent_detaches_only_direct_children_and_roundtrips() {
+    let (dir, mut v) = setup();
+    let parent = add_tag(&mut v, "Parent", None);
+    let child = add_tag(&mut v, "Child", Some(&parent));
+    let leaf = add_tag(&mut v, "Leaf", Some(&child));
+    let note = create_note(&mut v);
+    let mut source = edit(&v);
+    source.tag_ids = vec![parent.clone(), child.clone(), leaf.clone()];
+    v.edit_source(source).unwrap();
+    fs::remove_file(dir.path().join("paper.pdf")).unwrap();
+    refresh(&mut v, |_, _| {}).unwrap();
+    let source_before = v.catalog.sources[0].clone();
+    let child_before = v
+        .catalog
+        .tags
+        .iter()
+        .find(|t| t.id == child)
+        .unwrap()
+        .clone();
+    let leaf_before =
+        serde_json::to_value(v.catalog.tags.iter().find(|t| t.id == leaf).unwrap()).unwrap();
+    let before = serde_json::to_value(&v.catalog).unwrap();
+    let impact = v.preview_tag_deletion(&parent).unwrap();
+    assert_eq!(impact.affected_sources, 1);
+    assert_eq!(impact.detached_children, 1);
+    assert_eq!(impact.path, "Parent");
+    assert_eq!(serde_json::to_value(&v.catalog).unwrap(), before);
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    v.delete_tag(&parent).unwrap();
+    drop(v);
+    let v = Vault::open(dir.path(), false).unwrap();
+    let mut expected = vec![child.clone(), leaf.clone()];
+    expected.sort();
+    assert_eq!(v.catalog.sources[0].tag_ids, expected);
+    assert_eq!(v.catalog.sources[0].created_at, source_before.created_at);
+    assert_ne!(v.catalog.sources[0].modified_at, source_before.modified_at);
+    let detached = v.catalog.tags.iter().find(|t| t.id == child).unwrap();
+    assert!(detached.parent_id.is_none());
+    assert_eq!(detached.created_at, child_before.created_at);
+    assert_ne!(detached.modified_at, child_before.modified_at);
+    assert_eq!(
+        serde_json::to_value(v.catalog.tags.iter().find(|t| t.id == leaf).unwrap()).unwrap(),
+        leaf_before
+    );
+    assert!(v.read_note(&note).unwrap().contains("Thoughts"));
+}
+
+#[test]
+fn deletion_root_collision_is_atomic_and_parent_field_is_required() {
+    let (dir, mut v) = setup();
+    let parent = add_tag(&mut v, "Parent", None);
+    add_tag(&mut v, "Same", None);
+    add_tag(&mut v, "Same", Some(&parent));
+    let before = fs::read(dir.path().join(".file_manager/tags.jsonl")).unwrap();
+    assert!(v.preview_tag_deletion(&parent).is_err());
+    assert!(v.delete_tag(&parent).is_err());
+    assert_eq!(
+        fs::read(dir.path().join(".file_manager/tags.jsonl")).unwrap(),
+        before
+    );
+    let mut json = serde_json::to_value(&v.catalog.tags[0]).unwrap();
+    json.as_object_mut().unwrap().remove("parent_id");
+    assert!(serde_json::from_value::<Tag>(json).is_err());
+}
+
+#[test]
+fn partial_tag_deletion_journal_recovers_both_registries() {
+    let (dir, mut v) = setup();
+    let parent = add_tag(&mut v, "Parent", None);
+    add_tag(&mut v, "Child", Some(&parent));
+    let mut source = edit(&v);
+    source.tag_ids = vec![parent.clone()];
+    v.edit_source(source).unwrap();
+    let (next, _) = crate::tag_hierarchy::plan_deletion(&v.catalog, &parent).unwrap();
+    let tags = next
+        .tags
+        .iter()
+        .map(|t| serde_json::to_string(t).unwrap() + "\n")
+        .collect::<String>();
+    let sources = next
+        .sources
+        .iter()
+        .map(|s| serde_json::to_string(s).unwrap() + "\n")
+        .collect::<String>();
+    let journal = serde_json::json!([{"path":"tags.jsonl","body":tags},{"path":"sources.jsonl","body":sources}]);
+    fs::write(v.dir().join("pending.json"), journal.to_string()).unwrap();
+    fs::write(v.dir().join("tags.jsonl"), tags).unwrap();
+    drop(v);
+    let v = Vault::open(dir.path(), false).unwrap();
+    assert_eq!(
+        serde_json::to_value(&v.catalog).unwrap(),
+        serde_json::to_value(next).unwrap()
+    );
+    assert!(!v.dir().join("pending.json").exists());
+    assert_eq!(original(dir.path()), b"original bytes");
 }

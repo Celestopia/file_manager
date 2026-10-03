@@ -41,3 +41,15 @@ function subscribe(notify: () => void) {
 export function useRecentTags(vault: string) {
   return decode(useSyncExternalStore(subscribe, () => read(vault)));
 }
+
+export function removeRecentTag(vault: string, id: string) {
+  try {
+    localStorage.setItem(
+      `recent-tags:${vault}`,
+      JSON.stringify(decode(read(vault)).filter((value) => value !== id)),
+    );
+  } catch {
+    /* Optional history. */
+  }
+  window.dispatchEvent(new Event(changed));
+}

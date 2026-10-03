@@ -1,129 +1,143 @@
+import { useState } from "react";
 import { ModalShell } from "../ui/ModalShell";
-import { type Source, type Tag, type TagEdit } from "../domain/types";
+import { Icon } from "../ui/Icons";
+import { hierarchyRows } from "./hierarchy";
+import type { Tag, Source } from "../domain/types";
 export function TagManagerDialog({
-  tagEdit,
-  setTagEdit,
-  tagDirty,
   busy,
   tags,
   sources,
-  selectedTags,
   closeTags,
   editTagChoice,
   deleteTag,
-  saveTag,
-  onAssignTags,
 }: {
-  tagEdit: TagEdit | null;
-  setTagEdit: (value: TagEdit) => void;
-  tagDirty: boolean;
   busy: boolean;
   tags: Tag[];
   sources: Source[];
-  selectedTags: string[];
-  closeTags: () => Promise<void>;
-  editTagChoice: (tag?: Tag) => Promise<void>;
-  deleteTag: () => Promise<void>;
-  saveTag: () => Promise<void>;
-  onAssignTags: (ids: string[]) => void;
+  closeTags: () => void;
+  editTagChoice: (tag?: Tag) => void;
+  deleteTag: (tag: Tag) => void;
 }) {
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState(
+    () => new Set(tags.filter((tag) => !tag.parent_id).map((tag) => tag.id)),
+  );
+  const search = !!query.trim();
+  const rows = hierarchyRows(tags, query, expanded);
+  const counts = new Map<string, number>();
+  for (const source of sources)
+    for (const id of source.tag_ids) counts.set(id, (counts.get(id) || 0) + 1);
   return (
     <ModalShell
-      className={`tags-modal ${tagEdit && !tagEdit.id ? "tag-create-modal" : ""}`}
-      label={tagEdit && !tagEdit.id ? "Create tag" : "Tags"}
+      className="tag-manager-dialog"
+      label="Manage Tags"
+      onDismiss={busy ? undefined : closeTags}
     >
       <header>
-        <h2>{tagEdit && !tagEdit.id ? "Create tag" : "Tags"}</h2>
-        <button disabled={busy} onClick={() => void closeTags()}>
-          Done
-        </button>
+        <h2>Manage Tags</h2>
+        <div className="tag-manager-header-actions">
+          <button
+            className="icon-button"
+            aria-label="Create tag"
+            title="Create tag"
+            disabled={busy}
+            onClick={() => editTagChoice()}
+          >
+            <Icon name="plus" />
+          </button>
+          <button
+            className="icon-button"
+            aria-label="Close tag manager"
+            title="Close"
+            disabled={busy}
+            onClick={closeTags}
+          >
+            <Icon name="close" />
+          </button>
+        </div>
       </header>
-      {(!tagEdit || tagEdit.id) && (
-        <p className="muted">
-          Assignments are saved with source metadata using Apply.
-        </p>
-      )}
-      <div className="tag-manager">
-        {(!tagEdit || tagEdit.id) && (
-          <div>
-            {[...tags]
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((t) => (
-                <div className="tag-choice" key={t.id}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      disabled={busy}
-                      checked={selectedTags.includes(t.id)}
-                      onChange={(e) =>
-                        onAssignTags(
-                          e.target.checked
-                            ? [...selectedTags, t.id]
-                            : selectedTags.filter((id) => id !== t.id),
-                        )
-                      }
-                    />
-                    <span title={t.description}>{t.name}</span>
-                  </label>
-                  <button disabled={busy} onClick={() => void editTagChoice(t)}>
-                    Edit
-                  </button>
-                </div>
-              ))}
-            <button disabled={busy} onClick={() => void editTagChoice()}>
-              + Create tag
-            </button>
-          </div>
-        )}
-        {tagEdit && (
-          <div className="tag-form">
-            <label>
-              Name
-              <input
-                value={tagEdit.name}
-                disabled={busy}
-                onChange={(e) =>
-                  setTagEdit({ ...tagEdit, name: e.target.value })
-                }
-              />
-            </label>
-            <label>
-              Description
-              <textarea
-                value={tagEdit.description}
-                disabled={busy}
-                onChange={(e) =>
-                  setTagEdit({ ...tagEdit, description: e.target.value })
-                }
-              />
-            </label>
-            <small>Names are case-sensitive.</small>
-            <div className="form-footer">
-              {tagEdit.id && (
-                <button
-                  className="danger"
-                  disabled={
-                    busy ||
-                    sources.some((s) => s.tag_ids.includes(tagEdit.id!)) ||
-                    selectedTags.includes(tagEdit.id)
-                  }
-                  title="Only unused tags can be deleted"
-                  onClick={() => void deleteTag()}
-                >
-                  Delete
-                </button>
-              )}
+      <input
+        aria-label="Search managed tags"
+        placeholder="Search tags or descriptions"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      <div className="tag-manager-fold-actions">
+        <button
+          disabled={busy || search || !tags.length}
+          onClick={() => setExpanded(new Set(tags.map((tag) => tag.id)))}
+        >
+          Expand all
+        </button>
+        <button
+          disabled={busy || search || !tags.length}
+          onClick={() => setExpanded(new Set())}
+        >
+          Collapse all
+        </button>
+      </div>
+      <div className="tag-manager-list">
+        {rows.map(({ tag, depth, hasChildren }) => (
+          <article
+            className="tag-manager-item"
+            key={tag.id}
+            data-tag-id={tag.id}
+            style={{ marginLeft: depth * 18 }}
+          >
+            {hasChildren ? (
               <button
-                className="primary"
-                disabled={
-                  busy || !tagEdit.name.trim() || (!tagDirty && !!tagEdit.id)
+                className="tag-manager-toggle"
+                aria-label={`${expanded.has(tag.id) || search ? "Collapse" : "Expand"} ${tag.name}`}
+                aria-expanded={search || expanded.has(tag.id)}
+                disabled={busy || search}
+                onClick={() =>
+                  setExpanded((current) => {
+                    const next = new Set(current);
+                    if (next.has(tag.id)) next.delete(tag.id);
+                    else next.add(tag.id);
+                    return next;
+                  })
                 }
-                onClick={() => void saveTag()}
               >
-                Apply tag
+                <Icon name="chevron" />
+              </button>
+            ) : (
+              <span className="tag-manager-toggle" aria-hidden="true" />
+            )}
+            <div className="tag-manager-item-main">
+              <div className="tag-manager-item-heading">
+                <strong>{tag.name}</strong>
+                <span title="Direct assignments only">
+                  {counts.get(tag.id) || 0} source files
+                </span>
+              </div>
+              {tag.description && (
+                <p className="tag-description">{tag.description}</p>
+              )}
+            </div>
+            <div className="tag-manager-actions">
+              <button
+                disabled={busy}
+                aria-label={`Edit tag ${tag.name}`}
+                onClick={() => editTagChoice(tag)}
+              >
+                Edit
+              </button>
+              <button
+                className="danger"
+                disabled={busy}
+                aria-label={`Delete tag ${tag.name} globally`}
+                onClick={() => deleteTag(tag)}
+              >
+                Delete Globally
               </button>
             </div>
-          </div>
+          </article>
+        ))}
+        {!rows.length && (
+          <p className="muted">
+            {tags.length ? "No matching tags" : "No tags yet"}
+          </p>
         )}
       </div>
     </ModalShell>

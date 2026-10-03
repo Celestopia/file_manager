@@ -9,15 +9,17 @@ Open `dist/File Manager/File Manager.exe` and choose a resource folder. Confirm 
 ## Use
 
 - **Source Files** lists originals in the left panel. PDF, Markdown (`.md`, `.markdown`), and UTF-8 TXT files have read-only previews. PDF pages scroll continuously and embedded text can be selected and copied (image-only scans need OCR, which is not included). The external-arrow icon opens a source in its default application.
-- **Details** (circled exclamation mark) opens source metadata on the right. Pencil icons toggle editing; **Apply** saves the title, description, complete HTTP(S) URL, and case-sensitive flat tags. File path, size, and timestamps are under collapsed **File information**.
+- **Details** (circled exclamation mark) opens source metadata on the right. Pencil icons toggle editing; **Apply** saves the title, description, complete HTTP(S) URL, and case-sensitive hierarchical tags. File path, size, and timestamps are under collapsed **File information**.
 - **Notes** opens the right reading-note panel. Choose a saved note to preview it, or **+** to create a note. **Save note** saves its title, description, and Markdown body. The **Information** icon opens description, timestamps, and saved-file size. The red bin permanently deletes only that note after confirmation.
-- Click the tag box to search all tags or choose from three recent selections. Assignments remain drafts until **Apply**. The adjacent plus and gear create and manage tag definitions.
+- Click the tag box to search all tags or choose from three recent selections. Assignments remain drafts until **Apply**. The adjacent plus creates a tag and adds it to the source draft; the gear opens Manage Tags for definition editing.
 - Use **Ctrl + scroll** over a PDF, Markdown, or TXT preview to zoom its content. PDF zoom supports 25–400%; text previews support 50–250% with a reset control. Zoom resets when opening another source. New windows start maximized; Restore returns to the normal window size.
 - Drag panel dividers to resize them. The source list can grow to half the window width, subject to space needed by the document and any open right panel. Drag the source divider near the left edge to collapse the list; the chevron restores it. Drag a right divider near the right edge to close that panel; its toolbar button reopens it. Closing or switching between right panels preserves drafts.
-- The bottom-left gear opens **Settings → Open folder / Refresh**. Refresh hashes every source file. Unambiguous unchanged-content moves retain knowledge; moving and editing together creates a new source and leaves the old record **Missing**, with notes intact.
+- The bottom-left gear opens **Settings → Open folder / Refresh / Manage Tags**. Refresh hashes every source file. Unambiguous unchanged-content moves retain knowledge; moving and editing together creates a new source and leaves the old record **Missing**, with notes intact.
 - Drag the centered header to move the window. Custom buttons minimize, maximize/restore, and close it. Notifications float at the top and disappear after five seconds.
 
 Navigation that replaces drafts offers **Save changes / Discard / Stay**. Source metadata and notes save independently. Switching folders keeps the current window until the replacement renderer is ready.
+
+Tags can have a parent. Use the tag manager to create, rename, reparent, or delete a tag; file assignments remain explicit. Deleting a tag clears its assignments and promotes its direct children to roots. A conflicting root name blocks deletion. Vaults use schema 2; older schemas are not automatically migrated.
 
 ## Your data
 
@@ -38,7 +40,7 @@ npm run desktop:dev
 
 ```powershell
 npm run check
-./scripts/build-portable.ps1
+npm run package:windows
 ./scripts/smoke-portable.ps1
 node scripts/inspect-native.mjs "dist/File Manager/File Manager.exe" clean
 ```

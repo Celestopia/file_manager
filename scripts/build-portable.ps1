@@ -21,8 +21,12 @@ try {
         Copy-Item -LiteralPath (Join-Path $projectRoot 'target\release\file-manager.exe') -Destination (Join-Path $stage 'File Manager.exe')
         Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination (Join-Path $stage 'README.md')
         Copy-Item -LiteralPath (Join-Path $projectRoot 'node_modules\pdfjs-dist\LICENSE') -Destination (Join-Path $stage 'PDF.js-LICENSE.txt')
-        $hash = Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage 'File Manager.exe')
-        "$($hash.Hash)  File Manager.exe" | Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS.txt') -Encoding ascii
+        # Use .NET directly so npm-launched Windows PowerShell needs no module autoload.
+        $sha256 = [Security.Cryptography.SHA256]::Create()
+        $exeStream = [IO.File]::OpenRead((Join-Path $stage 'File Manager.exe'))
+        try { $checksum = [BitConverter]::ToString($sha256.ComputeHash($exeStream)).Replace('-', '') }
+        finally { $exeStream.Dispose(); $sha256.Dispose() }
+        "$checksum  File Manager.exe" | Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS.txt') -Encoding ascii
         $oldExe = Join-Path $destination 'File Manager.exe'
         if (Test-Path -LiteralPath $oldExe) {
             try {

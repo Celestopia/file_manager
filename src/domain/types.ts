@@ -24,6 +24,7 @@ export interface Note {
   modified_at: string;
 }
 export interface Tag {
+  parent_id: string | null;
   id: string;
   name: string;
   description: string;
@@ -107,6 +108,7 @@ export function fileSize(bytes: number | null | undefined): string {
 }
 
 export interface TagEdit {
+  parent_id: string | null;
   id: string | null;
   name: string;
   description: string;

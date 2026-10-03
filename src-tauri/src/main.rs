@@ -5,6 +5,7 @@ mod paths;
 mod scanner;
 mod smoke;
 mod startup;
+mod tag_hierarchy;
 use smoke::{renderer_ready, smoke_result};
 use startup::StartupOptions;
 #[cfg(test)]
@@ -90,6 +91,10 @@ async fn edit_tag(app: tauri::AppHandle, edit: TagEdit) -> Reply<Snapshot> {
         Ok(v.snapshot())
     })
     .await
+}
+#[tauri::command]
+async fn preview_tag_deletion(app: tauri::AppHandle, id: String) -> Reply<TagDeletionImpact> {
+    with_vault(app, move |v| v.preview_tag_deletion(&id)).await
 }
 #[tauri::command]
 async fn delete_tag(app: tauri::AppHandle, id: String) -> Reply<Snapshot> {
@@ -269,6 +274,7 @@ fn start(options: StartupOptions) -> anyhow::Result<()> {
             delete_note,
             edit_tag,
             delete_tag,
+            preview_tag_deletion,
             open_source,
             open_url,
             pdf_size,

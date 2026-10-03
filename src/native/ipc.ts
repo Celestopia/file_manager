@@ -19,6 +19,10 @@ type Commands = {
   ];
   delete_note: [{ id: string }, Snapshot];
   edit_tag: [{ edit: TagEdit }, Snapshot];
+  preview_tag_deletion: [
+    { id: string },
+    { path: string; affected_sources: number; detached_children: number },
+  ];
   delete_tag: [{ id: string }, Snapshot];
   open_source: [{ id: string }, void];
   open_url: [{ id: string }, void];

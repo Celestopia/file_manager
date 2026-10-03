@@ -119,10 +119,10 @@ try {
   };
   const click = async (label) => {
     await wait(
-      `Array.from(document.querySelectorAll('button, [role=button]')).some(e=>(e.getAttribute('aria-label')===${JSON.stringify(label)}||e.textContent.trim()===${JSON.stringify(label)})&&!e.disabled)`,
+      `Array.from(document.querySelectorAll('button, [role=button]')).filter(e=>!e.closest('[inert]')).some(e=>(e.getAttribute('aria-label')===${JSON.stringify(label)}||e.textContent.trim()===${JSON.stringify(label)})&&!e.disabled)`,
     );
     await evaluate(
-      `Array.from(document.querySelectorAll('button, [role=button]')).find(e=>e.getAttribute('aria-label')===${JSON.stringify(label)}||e.textContent.trim()===${JSON.stringify(label)}).click()`,
+      `Array.from(document.querySelectorAll('button, [role=button]')).filter(e=>!e.closest('[inert]')).find(e=>e.getAttribute('aria-label')===${JSON.stringify(label)}||e.textContent.trim()===${JSON.stringify(label)}).click()`,
     );
   };
   const fill = async (selector, value) => {
@@ -143,9 +143,25 @@ try {
   await wait(
     "document.querySelector('.textLayer span')?.textContent.includes('Selectable page 1')",
   );
-  const textRect = await evaluate(
-    `(() => { const r = document.querySelector('.textLayer span').getBoundingClientRect(); return {x:r.x, y:r.y, width:r.width, height:r.height}; })()`,
-  );
+  // Restore and PDF fit-width rerender are asynchronous; use settled coordinates.
+  await wait("!document.querySelector('[aria-label=\"Restore window\"]')");
+  const readTextRect = () =>
+    evaluate(
+      `(() => { const r = document.querySelector('.textLayer span')?.getBoundingClientRect(); return r ? {x:r.x, y:r.y, width:r.width, height:r.height} : null; })()`,
+    );
+  let textRect = await readTextRect(),
+    stable = 0;
+  for (let attempt = 0; attempt < 30 && stable < 3; attempt++) {
+    await sleep(100);
+    const next = await readTextRect();
+    stable =
+      next && JSON.stringify(next) === JSON.stringify(textRect)
+        ? stable + 1
+        : 0;
+    textRect = next;
+  }
+  if (!textRect || stable < 3)
+    throw Error("PDF layout did not settle after Restore");
   await send("Input.dispatchMouseEvent", {
     type: "mousePressed",
     x: textRect.x + 1,
@@ -528,17 +544,13 @@ try {
   await wait(
     "document.querySelector('h1')?.textContent==='A place for your understanding'",
   );
-  await click("Edit tags");
-  await click("+ Create tag");
-  if (await evaluate("!!document.querySelector('.tag-choice')"))
-    throw Error("Create tag dialog shows existing tags");
+  await click("Create tag");
+  await wait("!!document.querySelector('.tag-editor-dialog')");
   await capture("create-tag");
-  await fill(".tag-form input", "Research");
-  await fill(".tag-form textarea", "Papers to think about.");
-  await click("Apply tag");
-  await wait("document.querySelector('.tag-choice input') !== null");
-  await evaluate("document.querySelector('.tag-choice input').click()");
-  await click("Done");
+  await fill(".tag-editor-dialog input", "Research");
+  await fill(".tag-editor-dialog textarea", "Papers to think about.");
+  await click("Create and Add");
+  await wait("document.querySelector('.tag-selection .tag') !== null");
   await click("Apply");
   await wait(
     "document.querySelector('.notifications').textContent.includes('Source metadata saved')",
@@ -552,10 +564,14 @@ try {
   await click("Select tags");
   await fill('[aria-label="Search tags"]', "rese");
   await wait(
-    "document.querySelector('.tag-options button')?.textContent.includes('Research')",
+    "document.querySelector('.tag-options .tag-tree-label')?.textContent.includes('Research')",
   );
-  await evaluate("document.querySelector('.tag-options button').click()");
-  await evaluate("document.querySelector('.tag-options button').click()");
+  await evaluate(
+    "document.querySelector('.tag-options .tag-tree-label').click()",
+  );
+  await evaluate(
+    "document.querySelector('.tag-options .tag-tree-label').click()",
+  );
   await wait("document.querySelector('[aria-label=\"Recent tags\"]')!==null");
   await capture("tag-dropdown");
   await evaluate(
@@ -566,6 +582,59 @@ try {
   await wait("document.querySelector('.tag-selection .tag')===null");
   await click("Reset");
   await wait("document.querySelector('.tag-selection .tag')!==null");
+  // Exercise management from vault operations, creation, and global deletion.
+  await click("Settings");
+  await click("Manage Tags");
+  await click("Create tag");
+  await fill(".tag-editor-dialog input", "Hierarchy");
+  await click("Create");
+  await wait("!!document.querySelector('[aria-label=\"Edit tag Hierarchy\"]')");
+  await click("Create tag");
+  await fill(".tag-editor-dialog input", "Child");
+  await click("Parent tag");
+  await fill('[aria-label="Search parent tags"]', "Hierarchy");
+  await evaluate(
+    "document.querySelector('.tag-parent-menu .tag-tree-label').click()",
+  );
+  await click("Create");
+  await click("Expand all");
+  await wait("!!document.querySelector('[aria-label=\"Edit tag Child\"]')");
+  await capture("tag-management");
+  await click("Edit tag Child");
+  await wait("!!document.querySelector('[aria-label=\"Edit Tag\"]')");
+  if (await evaluate("!!document.querySelector('.tag-manager-list input')"))
+    throw Error("Tag editor is embedded in manager");
+  await capture("tag-editor");
+  await click("Cancel");
+  await wait("!document.querySelector('[aria-label=\"Edit Tag\"]')");
+  await click("Close tag manager");
+  await click("Select tags");
+  await fill('[aria-label="Search tags"]', "Hierarchy");
+  await evaluate(
+    "document.querySelector('.tag-options .tag-tree-label').click()",
+  );
+  await evaluate(
+    "document.querySelector('[aria-label=\"Search tags\"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))",
+  );
+  await click("Apply");
+  await wait("document.querySelectorAll('.tag-selection .tag').length===2");
+  await click("Edit tags");
+  await click("Delete tag Hierarchy globally");
+  await wait("!!document.querySelector('[role=alertdialog]')");
+  if (
+    !(await evaluate(
+      "document.querySelector('[role=alertdialog]').textContent.includes('1 source(s)')",
+    ))
+  )
+    throw Error("Missing deletion impact");
+  await evaluate(
+    "[...document.querySelectorAll('[role=alertdialog] button')].find(e=>e.textContent==='Delete').click()",
+  );
+  await wait(
+    "!!document.querySelector('[aria-label=\"Edit tag Child\"]') && !document.querySelector('[aria-label=\"Edit tag Hierarchy\"]')",
+  );
+  await click("Close tag manager");
+  await wait("document.querySelectorAll('.tag-selection .tag').length===1");
   await send("Emulation.setDeviceMetricsOverride", {
     width: 850,
     height: 650,
@@ -625,7 +694,7 @@ try {
   )
     throw Error("Size remains in note body panel");
   await wait(
-    "Array.from(document.querySelectorAll('button, [role=button]')).some(e=>e.getAttribute('aria-label')==='Delete note')",
+    "Array.from(document.querySelectorAll('button, [role=button]')).filter(e=>!e.closest('[inert]')).some(e=>e.getAttribute('aria-label')==='Delete note')",
   );
   await click("Preview");
   await wait("document.querySelector('.markdown')!==null");
@@ -659,7 +728,7 @@ try {
   await fill('[aria-label="Markdown note body"]', "Temporary deletion test");
   await click("Save note");
   await wait(
-    "Array.from(document.querySelectorAll('button, [role=button]')).some(e=>e.getAttribute('aria-label')==='Delete note'&&!e.disabled)",
+    "Array.from(document.querySelectorAll('button, [role=button]')).filter(e=>!e.closest('[inert]')).some(e=>e.getAttribute('aria-label')==='Delete note'&&!e.disabled)",
   );
   await click("Delete note");
   await click("Delete permanently");

@@ -22,6 +22,7 @@ export function sameNote(a: NoteDraft, b: NoteDraft) {
 export function sameTag(a: TagEdit, b: TagEdit) {
   return (
     a.id === b.id &&
+    a.parent_id === b.parent_id &&
     a.name.trim() === b.name.trim() &&
     a.description === b.description
   );

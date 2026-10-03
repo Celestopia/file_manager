@@ -9,6 +9,7 @@
     "test": "vitest run",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build --no-bundle",
+    "package:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1",
     "pretest": "node scripts/export-contract.mjs",
     "lint": "eslint src",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"scripts/*.mjs\" \"*.{json,ts,mjs,md}\" \"docs/**/*.md\"",

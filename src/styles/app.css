@@ -578,22 +578,6 @@ small {
   justify-content: flex-end;
   margin-top: 22px;
 }
-.tags-modal {
-  width: 660px;
-}
-.tags-modal header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.tags-modal h2 {
-  margin: 0;
-}
-.tag-manager {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
 .tag-choice {
   display: flex;
   align-items: center;
@@ -610,14 +594,6 @@ small {
   font-size: 11px;
   padding: 3px 8px;
 }
-.tag-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border-left: 1px solid #e0e6db;
-  padding-left: 20px;
-}
-
 .placeholder {
   color: #7b8875;
 }
@@ -782,17 +758,7 @@ a:visited {
 .source-resize-handle:focus-visible {
   background: #91b7e5;
 }
-.tag-create-modal {
-  width: 420px;
-}
-.tag-create-modal .tag-manager {
-  display: block;
-  margin-top: 20px;
-}
-.tag-create-modal .tag-form {
-  border-left: 0;
-  padding-left: 0;
-}
+
 .notifications {
   position: fixed;
   top: 82px;
@@ -1041,7 +1007,7 @@ a:visited {
   min-width: 120px;
 }
 .tag-picker .tag-selection {
-  cursor: pointer;
+  cursor: default;
 }
 .tag-dropdown {
   position: absolute;
@@ -1079,7 +1045,7 @@ a:visited {
   border-radius: 4px;
   overflow-wrap: anywhere;
 }
-.tag-options button[aria-checked="true"] {
+.tag-options button[aria-pressed="true"] {
   background: #e8f0e6;
   color: var(--accent);
 }
@@ -1156,4 +1122,249 @@ a:visited {
 }
 .textLayer[data-main-rotation="270"] {
   transform: rotate(270deg) translateX(-100%);
+}
+
+.tag-tree-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 2px 0;
+  border-radius: 5px;
+}
+.tag-tree-row:hover {
+  background: #f0f5ee;
+}
+.tag-tree-row.is-selected {
+  background: #e8f0e6;
+  color: var(--accent);
+}
+.tag-tree-row .tag-tree-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+  font: inherit;
+  padding: 9px 8px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+.tag-tree-row .tag-expander {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+.tag-tree-row > button:not(.tag-tree-label):not(.tag-expander) {
+  align-self: center;
+  margin-right: 4px;
+}
+.tag-parent-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+.tag-parent-menu {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 10px;
+  max-height: 260px;
+  overflow: auto;
+}
+.tag-parent-menu input {
+  width: 100%;
+  margin-bottom: 6px;
+}
+.tag-tree {
+  overflow: auto;
+  max-height: 360px;
+}
+.tag-options .tag-tree-row > button {
+  width: auto;
+}
+
+.tag-options .tag-tree,
+.tag-parent-menu .tag-tree {
+  max-height: none;
+  overflow: visible;
+}
+.tag-parent-picker > button {
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.tag-manager-dialog {
+  width: min(760px, 96vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tag-editor-dialog {
+  width: min(560px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+}
+.tag-manager-dialog header,
+.tag-editor-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tag-manager-dialog h2,
+.tag-editor-dialog h2 {
+  margin: 0;
+  font:
+    600 22px "Segoe UI",
+    sans-serif;
+}
+.tag-manager-header-actions {
+  display: flex;
+  gap: 8px;
+}
+.tag-manager-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 4px;
+}
+.tag-manager-item,
+.tag-editor-dialog .tag-definition-form {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8faf7;
+}
+.tag-manager-item-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+.tag-manager-item-heading span {
+  color: #6b7d70;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.tag-parent-summary,
+.tag-description {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.tag-parent-summary {
+  font-size: 12px;
+  color: #6b7d70;
+}
+.tag-description {
+  color: #526858;
+}
+.tag-manager-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.tag-definition-form {
+  margin-top: 12px;
+}
+.tag-definition-fields {
+  display: grid;
+  gap: 10px;
+}
+.tag-definition-fields > label,
+.tag-definition-fields .tag-parent-picker {
+  display: grid;
+  grid-template-columns: 105px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.tag-definition-fields > label > span,
+.tag-definition-fields .tag-parent-picker > span {
+  padding-top: 8px;
+  color: #526858;
+}
+.tag-definition-fields input,
+.tag-definition-fields textarea {
+  width: 100%;
+  min-width: 0;
+}
+.tag-definition-fields textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+.tag-definition-fields .tag-parent-menu {
+  grid-column: 2;
+}
+.tag-naming-hint {
+  margin-left: 115px;
+  color: #6b7d70;
+}
+@media (max-width: 600px) {
+  .tag-definition-fields > label,
+  .tag-definition-fields .tag-parent-picker {
+    grid-template-columns: 1fr;
+  }
+  .tag-definition-fields .tag-parent-menu {
+    grid-column: 1;
+  }
+  .tag-naming-hint {
+    margin-left: 0;
+  }
+}
+
+.tag-manager-fold-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.tag-manager-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.tag-manager-item-main {
+  min-width: 0;
+  flex: 1;
+}
+.tag-manager-item .tag-manager-actions {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+.tag-manager-item-heading {
+  flex-wrap: wrap;
+}
+.tag-manager-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  flex-shrink: 0;
+}
+.tag-manager-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+.tag-manager-item-heading strong {
+  font-size: 16px;
+}
+@media (max-width: 650px) {
+  .tag-manager-item {
+    flex-wrap: wrap;
+  }
+  .tag-manager-item .tag-manager-actions {
+    margin-left: auto;
+  }
 }

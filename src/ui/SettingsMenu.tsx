@@ -5,11 +5,13 @@ export function SettingsMenu({
   hasVault,
   onOpen,
   onRefresh,
+  onManageTags,
 }: {
   busy: boolean;
   hasVault: boolean;
   onOpen: () => void;
   onRefresh: () => void;
+  onManageTags: () => void;
 }) {
   const [open, setOpen] = useState(false),
     root = useRef<HTMLDivElement>(null),
@@ -114,6 +116,14 @@ export function SettingsMenu({
           >
             <Icon name="refresh" />
             {busy ? "Working…" : "Refresh"}
+          </button>
+          <button
+            role="menuitem"
+            disabled={busy || !hasVault}
+            onClick={() => action(onManageTags)}
+          >
+            <Icon name="tag" />
+            Manage Tags
           </button>
         </div>
       )}

@@ -20,7 +20,8 @@ import { SourceHeader } from "../sources/SourceHeader";
 import { SourceList } from "../sources/SourceList";
 import { SourceMetadataPanel } from "../sources/SourceMetadataPanel";
 import "../styles/app.css";
-import { recordRecentTags } from "../tags/tagHistory";
+import { recordRecentTags, removeRecentTag } from "../tags/tagHistory";
+import { TagEditorDialog } from "../tags/TagEditorDialog";
 import { TagManagerDialog } from "../tags/TagManagerDialog";
 import { TextSourceViewer } from "../viewers/TextSourceViewer";
 import {
@@ -92,6 +93,9 @@ export function App() {
     [revision, setRevision] = useState(0);
   const [decision, setDecision] = useState<Decision | null>(null),
     [tagsOpen, setTagsOpen] = useState(false),
+    [tagCreateTarget, setTagCreateTarget] = useState<"source" | "manager">(
+      "manager",
+    ),
     [tagEdit, setTagEdit] = useState<TagEdit | null>(null),
     [tagBase, setTagBase] = useState<TagEdit | null>(null);
   const taskRunning = useRef(false),
@@ -371,7 +375,10 @@ export function App() {
       if (path) await invoke("switch_folder", { path });
     });
   }
-  async function editTagChoice(tag?: Tag) {
+  async function editTagChoice(
+    tag?: Tag,
+    target: "source" | "manager" = "manager",
+  ) {
     if (
       tagDirty &&
       (await ask("Unsaved tag changes", "Discard this tag draft?", [
@@ -380,15 +387,17 @@ export function App() {
       ])) !== "Discard"
     )
       return;
+    if (!tag) setTagCreateTarget(target);
     const d = {
       id: tag?.id || null,
       name: tag?.name || "",
+      parent_id: tag?.parent_id ?? null,
       description: tag?.description || "",
     };
     setTagEdit(d);
     setTagBase(d);
   }
-  async function closeTags() {
+  async function cancelTagEdit(): Promise<boolean> {
     if (
       !tagDirty ||
       (await ask("Unsaved tag changes", "Discard this tag draft?", [
@@ -396,30 +405,68 @@ export function App() {
         "Stay",
       ])) === "Discard"
     ) {
-      setTagsOpen(false);
       setTagEdit(null);
       setTagBase(null);
+      return true;
     }
+    return false;
   }
-  async function deleteTag() {
-    if (!tagEdit?.id) return;
+  async function closeTags() {
+    if (await cancelTagEdit()) setTagsOpen(false);
+  }
+  async function deleteTag(tag: Tag) {
+    const id = tag.id;
+    const impact = await task(() => invoke("preview_tag_deletion", { id }));
+    if (!impact) return;
     if (
-      (await ask("Delete unused tag?", `Delete “${tagEdit.name}”?`, [
-        "Delete",
-        "Cancel",
-      ])) !== "Delete"
+      (await ask(
+        "Delete tag globally?",
+        `Delete “${tag.name}”? Remove assignments from ${impact.affected_sources} source(s) and move ${impact.detached_children} direct child tag(s) to the root. Descendants and their assignments remain.${tagDirty && tagEdit?.id === id ? " Unsaved edits to this tag will be discarded." : ""}`,
+        ["Delete", "Cancel"],
+      )) !== "Delete"
     )
       return;
     await task(async () => {
-      setData(await invoke("delete_tag", { id: tagEdit.id! }));
-      setTagEdit(null);
-      setTagBase(null);
+      const next = await invoke("delete_tag", { id });
+      setData(next);
+      setDraft((current) =>
+        current
+          ? { ...current, tag_ids: current.tag_ids.filter((t) => t !== id) }
+          : current,
+      );
+      setBaseSource((current) =>
+        current
+          ? { ...current, tag_ids: current.tag_ids.filter((t) => t !== id) }
+          : current,
+      );
+      removeRecentTag(next.root, id);
+      const reconcileTag = (current: TagEdit | null) =>
+        current?.id === id
+          ? null
+          : current
+            ? {
+                ...current,
+                parent_id: current.parent_id === id ? null : current.parent_id,
+              }
+            : null;
+      setTagEdit(reconcileTag);
+      setTagBase(reconcileTag);
+      setStatus("Tag deleted");
     });
   }
   async function saveTag() {
     if (!tagEdit) return;
     await task(async () => {
-      setData(await invoke("edit_tag", { edit: tagEdit }));
+      const next = await invoke("edit_tag", { edit: tagEdit });
+      setData(next);
+      if (!tagEdit.id && tagCreateTarget === "source" && draft) {
+        const created = next.catalog.tags.find(
+          (tag) => !data!.catalog.tags.some((old) => old.id === tag.id),
+        );
+        if (created) {
+          assignTags([...draft.tag_ids, created.id]);
+        }
+      }
       setTagEdit(null);
       setTagBase(null);
       setStatus("Tag saved");
@@ -464,6 +511,7 @@ export function App() {
           onSelect={(id) => void transition(() => selectSource(id))}
           onOpen={() => void transition(openFolder)}
           onRefresh={() => void transition(runRefresh)}
+          onManageTags={() => setTagsOpen(true)}
         />
         <ResizeHandle
           label="Resize source files"
@@ -570,10 +618,9 @@ export function App() {
               void task(() => invoke("open_url", { id: selected }))
             }
             onAssignTags={assignTags}
-            onCreateTag={() => {
-              setTagsOpen(true);
-              void editTagChoice();
-            }}
+            onCreateTag={() =>
+              void transition(() => editTagChoice(undefined, "source"))
+            }
             onManageTags={() => setTagsOpen(true)}
             onReset={() => {
               const d = sourceEdit(source);
@@ -658,20 +705,31 @@ export function App() {
           </p>
         </InformationDialog>
       )}
-      {tagsOpen && draft && (
+      {tagsOpen && data && (
         <TagManagerDialog
-          tagEdit={tagEdit}
-          setTagEdit={setTagEdit}
-          tagDirty={tagDirty}
           busy={busy}
-          tags={data!.catalog.tags}
-          sources={data!.catalog.sources}
-          selectedTags={draft.tag_ids}
-          closeTags={closeTags}
-          editTagChoice={editTagChoice}
-          deleteTag={deleteTag}
-          saveTag={saveTag}
-          onAssignTags={assignTags}
+          tags={data.catalog.tags}
+          sources={data.catalog.sources}
+          closeTags={() => void transition(closeTags)}
+          editTagChoice={(tag) => void transition(() => editTagChoice(tag))}
+          deleteTag={(tag) => void transition(() => deleteTag(tag))}
+        />
+      )}
+      {tagEdit && data && (
+        <TagEditorDialog
+          key={tagEdit.id || "new"}
+          draft={tagEdit}
+          tags={data.catalog.tags}
+          busy={busy}
+          dirty={tagDirty}
+          setDraft={setTagEdit}
+          addToSource={tagCreateTarget === "source"}
+          onSave={() => void saveTag()}
+          onClose={() =>
+            void transition(async () => {
+              await cancelTagEdit();
+            })
+          }
         />
       )}
       {decision && (

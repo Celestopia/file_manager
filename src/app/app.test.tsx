@@ -131,6 +131,20 @@ beforeEach(() => {
       database.note_sizes[id] = new TextEncoder().encode(args.edit.body).length;
       return [structuredClone(database), id];
     }
+    if (command === "edit_tag") {
+      const existing = database.catalog.tags.find(
+        (tag) => tag.id === args.edit.id,
+      );
+      if (existing) Object.assign(existing, args.edit);
+      else
+        database.catalog.tags.push({
+          ...args.edit,
+          id: "tag-new",
+          created_at: time,
+          modified_at: time,
+        });
+      return structuredClone(database);
+    }
     if (command === "delete_note") {
       database.catalog.notes = database.catalog.notes.filter(
         (n) => n.id !== args.id,
@@ -458,6 +472,7 @@ it("tag assignments restored to the same set do not create an unsaved draft", as
   database.catalog.tags = ["a", "b"].map((id) => ({
     id,
     name: id,
+    parent_id: null,
     description: "",
     created_at: time,
     modified_at: time,
@@ -469,7 +484,7 @@ it("tag assignments restored to the same set do not create an unsaved draft", as
   fireEvent.click(screen.getByRole("button", { name: "Select tags" }));
   fireEvent.click(
     within(screen.getByRole("group", { name: "All tags" })).getByRole(
-      "checkbox",
+      "button",
       { name: "a" },
     ),
   );
@@ -540,18 +555,18 @@ it("tag modal isolates background focus and confirmation keeps its owner", async
   fireEvent.click(screen.getByRole("button", { name: "Details" }));
   const close = screen.getByRole("button", { name: "Close window" });
   fireEvent.click(screen.getByRole("button", { name: "Create tag" }));
-  const dialog = screen.getByRole("dialog", { name: "Create tag" });
+  const dialog = await screen.findByRole("dialog", { name: "Create Tag" });
   close.focus();
   expect(dialog.contains(document.activeElement)).toBe(true);
-  fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), {
+  fireEvent.change(within(dialog).getByRole("textbox", { name: "Tag name" }), {
     target: { value: "draft" },
   });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   await screen.findByRole("alertdialog");
   await windowEvents.close?.({ preventDefault: vi.fn() });
   expect(screen.getAllByRole("alertdialog")).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "Stay" }));
-  expect(within(dialog).getByRole("textbox", { name: "Name" })).toHaveValue(
+  expect(within(dialog).getByRole("textbox", { name: "Tag name" })).toHaveValue(
     "draft",
   );
   expect(destroyWindow).not.toHaveBeenCalled();
@@ -578,4 +593,144 @@ it("right-panel collapse preserves the source draft and reopens from Details", a
     "Unsaved title",
   );
   expect(database.catalog.sources[0].title).toBe("Alpha");
+});
+
+it("global tag deletion preserves other source draft edits and removes stale assignments", async () => {
+  database.catalog.tags = ["parent", "other"].map((id) => ({
+    id,
+    name: id,
+    parent_id: null,
+    description: "",
+    created_at: time,
+    modified_at: time,
+  }));
+  database.catalog.sources[0].tag_ids = ["parent"];
+  const original = call.getMockImplementation()!;
+  call.mockImplementation(async (command, args) => {
+    if (command === "preview_tag_deletion")
+      return { path: "parent", affected_sources: 1, detached_children: 0 };
+    if (command === "delete_tag") {
+      database.catalog.tags = database.catalog.tags.filter(
+        (t) => t.id !== args.id,
+      );
+      database.catalog.sources[0].tag_ids = [];
+      return structuredClone(database);
+    }
+    return original(command, args);
+  });
+  await start();
+  fireEvent.click(screen.getByRole("button", { name: "Details" }));
+  fireEvent.click(screen.getByRole("button", { name: "Edit Title" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Title" }), {
+    target: { value: "Keep my draft" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Select tags" }));
+  fireEvent.click(screen.getByRole("button", { name: "other" }));
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "Search tags" }), {
+    key: "Escape",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Edit tags" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Delete tag parent globally" }),
+  );
+  const confirm = await screen.findByRole("alertdialog");
+  fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: "Edit tag parent" }),
+    ).toBeNull(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Close tag manager" }));
+  expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue(
+    "Keep my draft",
+  );
+  expect(
+    screen.queryByRole("button", { name: "Remove tag parent" }),
+  ).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Remove tag other" }),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+  await waitFor(() =>
+    expect(database.catalog.sources[0].title).toBe("Keep my draft"),
+  );
+  expect(database.catalog.sources[0].tag_ids).toEqual(["other"]);
+});
+
+it("opens tag management from vault operations without a selected source", async () => {
+  database.catalog.sources = [];
+  render(<App />);
+  await waitFor(() => expect(call).toHaveBeenCalledWith("renderer_ready"));
+  fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Manage Tags" }));
+  const manager = screen.getByRole("dialog", { name: "Manage Tags" });
+  expect(within(manager).getByText("No tags yet")).toBeInTheDocument();
+  fireEvent.change(within(manager).getByRole("textbox"), {
+    target: { value: "New" },
+  });
+  fireEvent.click(within(manager).getByRole("button", { name: "Create tag" }));
+  const create = screen.getByRole("dialog", { name: "Create Tag" });
+  fireEvent.change(within(create).getByRole("textbox", { name: "Tag name" }), {
+    target: { value: "New tag" },
+  });
+  fireEvent.click(within(create).getByRole("button", { name: "Create" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "Create Tag" })).toBeNull(),
+  );
+  expect(within(manager).getByRole("textbox")).toHaveValue("New");
+  expect(within(manager).getByText("New tag")).toBeInTheDocument();
+  expect(within(manager).getByText("0 source files")).toBeInTheDocument();
+  expect(call.mock.calls.some((c) => c[0] === "edit_source")).toBe(false);
+});
+
+it("creates and adds a tag only to the source draft, and parent selection does not submit", async () => {
+  await start();
+  fireEvent.click(screen.getByRole("button", { name: "Details" }));
+  fireEvent.click(screen.getByRole("button", { name: "Create tag" }));
+  const create = screen.getByRole("dialog", { name: "Create Tag" });
+  fireEvent.change(within(create).getByRole("textbox", { name: "Tag name" }), {
+    target: { value: "New tag" },
+  });
+  fireEvent.click(within(create).getByRole("button", { name: "Parent tag" }));
+  fireEvent.click(within(create).getByRole("button", { name: "No parent" }));
+  expect(call.mock.calls.some((c) => c[0] === "edit_tag")).toBe(false);
+  fireEvent.click(
+    within(create).getByRole("button", { name: "Create and Add" }),
+  );
+  await screen.findByRole("button", { name: "Remove tag New tag" });
+  expect(database.catalog.sources[0].tag_ids).toEqual([]);
+  expect(screen.queryByRole("dialog", { name: "Manage Tags" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+  await waitFor(() =>
+    expect(database.catalog.sources[0].tag_ids).toEqual(["tag-new"]),
+  );
+});
+
+it("edits tags in a separate dialog and preserves drafts when cancellation is declined", async () => {
+  database.catalog.tags = [
+    {
+      id: "t",
+      name: "Old",
+      parent_id: null,
+      description: "Original description",
+      created_at: time,
+      modified_at: time,
+    },
+  ];
+  await start();
+  fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Manage Tags" }));
+  fireEvent.click(screen.getByRole("button", { name: "Edit tag Old" }));
+  const editor = await screen.findByRole("dialog", { name: "Edit Tag" });
+  expect(editor.querySelector("form")).not.toBeNull();
+  expect(document.querySelector(".tag-manager-list form")).toBeNull();
+  fireEvent.change(await screen.findByRole("textbox", { name: "Tag name" }), {
+    target: { value: "New" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Stay" }));
+  expect(screen.getByRole("textbox", { name: "Tag name" })).toHaveValue("New");
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("button", { name: "Edit tag New" });
+  expect(database.catalog.tags[0].name).toBe("New");
 });

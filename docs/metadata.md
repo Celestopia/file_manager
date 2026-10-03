@@ -18,7 +18,7 @@ This document owns the canonical entity schema, identity fields, application tim
   runtime/webview2/             # disposable webview data
 ```
 
-`vault.json` contains `schema_version: 1` and a lowercase UUID v4 `id`. Source, note, and tag IDs are also lowercase UUID v4 values. Registries are UTF-8 JSONL, sorted by UUID on writes, with one homogeneous record per line and a trailing newline. Empty registries are valid. Unknown fields, malformed records, duplicate IDs/paths, unknown tag assignments, broken note ownership, invalid timestamps, and unsupported manifest versions are rejected. Errors from malformed JSONL identify the file and line.
+`vault.json` contains `schema_version: 2` and a lowercase UUID v4 `id`. Source, note, and tag IDs are also lowercase UUID v4 values. Registries are UTF-8 JSONL, sorted by UUID on writes, with one homogeneous record per line and a trailing newline. Empty registries are valid. Unknown fields, malformed records, duplicate IDs/paths, unknown tag assignments, broken note ownership, invalid timestamps, and unsupported manifest versions are rejected. Errors from malformed JSONL identify the file and line.
 
 ### Source
 
@@ -41,7 +41,13 @@ The body editor has an 8 MiB UTF-8 limit and bounded reads. Missing bodies are e
 
 ### Tag
 
-`id`, `name`, `description`, `created_at`, `modified_at`. Names are trimmed, nonempty, case-sensitive, and unique per vault. `Research` and `research` are distinct. Tags are flat. Only unused tags can be deleted; source unassignment is explicit. The UI also blocks deletion while the active draft assigns that tag.
+`id`, `name`, required nullable `parent_id`, `description`, `created_at`, `modified_at`. A null parent is a root. Each tag has at most one parent; parent IDs must exist and the graph must be acyclic. Children and full paths are derived, never stored. Names are trimmed, nonempty, case-sensitive, and unique among siblings (including roots). `Research` and `research` are distinct; different branches may reuse a name.
+
+Sources may explicitly receive any tag. Selecting a parent does not select descendants, and selecting a child does not assign ancestors. Renaming or reparenting preserves IDs and assignments; a subtree follows its parent's move without rewriting descendant records.
+
+Deleting a tag globally removes that exact ID from all source assignments, including missing sources, and promotes its direct children to roots. Deeper relationships and descendant assignments survive. A root-name collision blocks the entire operation; users must rename or move the conflicting tag first. Deletion is previewed with its saved path, affected-source count, and direct-child count, then revalidated and committed as one journal transaction.
+
+Schema 1 is unsupported; there is no automatic migration. The development test vault is updated explicitly to schema 2.
 
 ### Timestamp semantics
 
@@ -52,7 +58,8 @@ Application times are UTC RFC 3339 with millisecond precision, displayed locally
 - Note title/description/body application edits update note time.
 - Reading externally edited Markdown does not update note time. No body signatures or external conflict checks are used.
 - A metadata-only note save does not rewrite the body; a changed body draft writes the current editor text even if another editor changed the file since load.
-- Tag name/description edits update tag time. Assigning a tag does not.
+- Tag name/description/parent edits update only that tag's time. Assigning a tag does not. A changed derived path does not update descendants or sources.
+- Global tag deletion updates modification times only for detached direct children and sources whose assignments changed. Their creation times and all note times remain unchanged.
 
 ## Runtime file facts
 

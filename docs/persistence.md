@@ -10,6 +10,7 @@ This document owns vault opening, source reconciliation, concurrency, and recove
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `src-tauri/src/model.rs`               | Serde models, availability enum, edits, snapshots, IDs, timestamps.                                      |
 | `paths.rs`                             | Storage-directory constant, canonical relative paths and Windows identity policy.                        |
+| `tag_hierarchy.rs`                     | Parent graph validation, derived paths, and atomic deletion planning.                                    |
 | `vault.rs`                             | Validation, safe filesystem resolution, lock, registries, journal execution, source/note/tag operations. |
 | `scanner.rs`                           | Recursive full hashing, conservative reconciliation, progress and summaries.                             |
 | `main.rs`                              | Thin Tauri commands, worker scheduling, startup and WebView construction.                                |
